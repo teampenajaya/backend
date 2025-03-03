@@ -11,7 +11,7 @@ app.set('trust proxy', 1); // add trust proxy setup
 // Middleware
 app.use(
   cors({
-    origin: ['https://laporanpenaslot.pages.dev', 'http://localhost:3000'], // Add your domains here
+    origin: ['https://laporanpenaslot.pages.dev'], // Add your domains here
     methods: ["POST"],
     credentials: true
   })
