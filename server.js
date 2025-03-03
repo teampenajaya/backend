@@ -6,6 +6,8 @@ const bodyParser = require("body-parser");
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+app.set('trust proxy', 1); // add trust proxy setup
+
 // Middleware
 app.use(
   cors({
