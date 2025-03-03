@@ -9,8 +9,9 @@ const PORT = process.env.PORT || 3001;
 // Middleware
 app.use(
   cors({
-    origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(",") : "*", // Whitelist origins
+    origin: ['https://laporanpenaslot.pages.dev', 'http://localhost:3000'], // Add your domains here
     methods: ["POST"],
+    credentials: true
   })
 );
 app.use(bodyParser.json({ limit: "100kb" })); // Limit payload size
