@@ -103,7 +103,7 @@ const validateCsrfToken = (req, res, next) => {
   if (!storedTokenData || storedTokenData.token !== csrfToken || storedTokenData.expires < Date.now()) {
     return res.status(403).json({
       success: false,
-      message: "Akses tidak dapat diproses. Silakan coba lagi.", //Access denied. Invalid or expired security token
+      message: "Token CSRF tidak valid atau kedaluwarsa.", //Access denied. Invalid or expired security token
     });
   }
 
@@ -185,6 +185,10 @@ ${description}
     res.status(500).json({ success: false, message: "Terjadi kesalahan pada server" });
   }
 });
+
+console.log("Session ID:", sessionId);
+console.log("CSRF Token:", csrfToken);
+console.log("Stored Token Data:", tokenStore.get(sessionId));
 
 // Jalankan server
 app.listen(PORT, () => {
