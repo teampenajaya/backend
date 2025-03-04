@@ -60,6 +60,8 @@ app.get("/get-csrf-token", (req, res) => {
 
   // Simpan token di server
   tokenStore.set(sessionId, tokenData);
+  
+  console.log("Stored Token Data:", tokenStore.get(sessionId));
 
   // Bersihkan token yang kedaluwarsa
   for (const [key, data] of tokenStore.entries()) {
@@ -90,6 +92,9 @@ app.get("/get-csrf-token", (req, res) => {
 const validateCsrfToken = (req, res, next) => {
   const sessionId = req.cookies.sessionId;
   const csrfToken = req.cookies.csrfToken;
+
+  console.log("CSRF Token:", csrfToken);
+  console.log("Session ID:", sessionId);
 
   if (!sessionId || !csrfToken) {
     return res.status(403).json({
@@ -186,9 +191,9 @@ ${description}
   }
 });
 
-console.log("Session ID:", sessionId);
-console.log("CSRF Token:", csrfToken);
-console.log("Stored Token Data:", tokenStore.get(sessionId));
+
+
+
 
 // Jalankan server
 app.listen(PORT, () => {
