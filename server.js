@@ -19,7 +19,7 @@ app.use(cookieParser(process.env.COOKIE_SECRET || "rahasia-penaslot-cookie"));
 app.use(bodyParser.json({ limit: "100kb" }));
 
 // Konfigurasi CORS
-const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(",") : ["https://laporanpenaslot.info"];
+const allowedOrigins = ["https://laporanpenaslot.info", "https://support.laporanpenaslot.info"];
 
 app.use(
   cors({
@@ -74,14 +74,14 @@ app.get("/get-csrf-token", (req, res) => {
   res.cookie("sessionId", sessionId, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
     maxAge: 30 * 60 * 1000,
   });
 
   res.cookie("csrfToken", tokenData.token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
     maxAge: 30 * 60 * 1000,
   });
 
@@ -93,13 +93,13 @@ const validateCsrfToken = (req, res, next) => {
   const sessionId = req.cookies.sessionId;
   const csrfToken = req.cookies.csrfToken;
 
-  console.log("CSRF Token:", csrfToken);
-  console.log("Session ID:", sessionId);
+  console.log("Session ID:", sessionId); // Debugging
+  console.log("CSRF Token:", csrfToken); // Debugging
 
   if (!sessionId || !csrfToken) {
     return res.status(403).json({
       success: false,
-      message: "Gagal memverifikasi permintaan. Coba lagi.", //Access denied. Invalid security token
+      message: "Gagal memverifikasi permintaan. Coba lagi.",
     });
   }
 
@@ -108,7 +108,7 @@ const validateCsrfToken = (req, res, next) => {
   if (!storedTokenData || storedTokenData.token !== csrfToken || storedTokenData.expires < Date.now()) {
     return res.status(403).json({
       success: false,
-      message: "Token CSRF tidak valid atau kedaluwarsa.", //Access denied. Invalid or expired security token
+      message: "Token CSRF tidak valid atau kedaluwarsa.",
     });
   }
 
