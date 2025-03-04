@@ -19,7 +19,7 @@ app.use(cookieParser(process.env.COOKIE_SECRET || "rahasia-penaslot-cookie"));
 app.use(bodyParser.json({ limit: "100kb" }));
 
 // Konfigurasi CORS
-const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(",") : ["https://laporanpenaslot.info/","https://support.laporanpenaslot.info/"];
+const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(",") : ["https://laporanpenaslot.info/","https://support.laporanpenaslot.info/","http://localhost:5173/"];
 
 app.use(
   cors({
@@ -60,7 +60,7 @@ app.get("/get-csrf-token", (req, res) => {
 
   // Simpan token di server
   tokenStore.set(sessionId, tokenData);
-  
+
   console.log("Stored Token Data:", tokenStore.get(sessionId));
 
   // Bersihkan token yang kedaluwarsa
