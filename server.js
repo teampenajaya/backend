@@ -19,7 +19,7 @@ app.use(cookieParser(process.env.COOKIE_SECRET || "rahasia-penaslot-cookie"));
 app.use(bodyParser.json({ limit: "100kb" }));
 
 // Konfigurasi CORS
-const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(",") : [""];
+const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(",") : ["https://laporanpenaslot.info/","https://support.laporanpenaslot.info/"];
 
 app.use(
   cors({
