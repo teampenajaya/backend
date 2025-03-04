@@ -81,7 +81,7 @@ app.get("/get-csrf-token", (req, res) => {
     secure: process.env.NODE_ENV === "production",
     sameSite: "strict",
     maxAge: 30 * 60 * 1000,
-  });asdasdasdas
+  });
 
   res.status(200).json({ success: true });
 });
