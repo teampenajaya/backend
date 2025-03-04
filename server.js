@@ -2,102 +2,129 @@ const express = require("express");
 const nodemailer = require("nodemailer");
 const cors = require("cors");
 const bodyParser = require("body-parser");
+const helmet = require("helmet");
+const cookieParser = require("cookie-parser");
+const crypto = require("crypto");
+const rateLimit = require("express-rate-limit");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.set('trust proxy', 1); // add trust proxy setup
+// Trust proxy untuk aplikasi yang di-deploy di layanan seperti Render/Heroku
+app.set("trust proxy", 1);
 
-// Middleware
+// Middleware keamanan
+app.use(helmet());
+app.use(cookieParser(process.env.COOKIE_SECRET || "rahasia-penaslot-cookie"));
+app.use(bodyParser.json({ limit: "100kb" }));
+
+// Konfigurasi CORS
+const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(",") : ["http://localhost:5173"];
+
 app.use(
   cors({
-    origin: ['https://laporanpenaslot.pages.dev'], // Add your domains here
-    methods: ["POST"],
-    credentials: true
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    methods: ["GET", "POST"],
+    credentials: true, // Izinkan pengiriman cookie
   })
 );
-app.use(bodyParser.json({ limit: "100kb" })); // Limit payload size
 
 // Rate limiting
-const rateLimit = require("express-rate-limit");
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // Limit each IP to 10 requests per windowMs
-  message: { success: false, message: "Terlalu banyak permintaan, coba lagi nanti" },
+  windowMs: 15 * 60 * 1000, // 15 menit
+  max: 10, // Batas 10 permintaan per IP
+  message: { success: false, message: "Too many requests." },
 });
-app.use("/send-complaint", limiter);
 
-// Validation helper functions
-const validators = {
-  username: (value) => {
-    return typeof value === "string" && value.trim().length >= 3 && value.trim().length <= 50 && /^[a-zA-Z0-9_]+$/.test(value);
-  },
-  email: (value) => {
-    return typeof value === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) && value.length <= 100;
-  },
-  gameId: (value) => {
-    // Optional field
-    if (!value) return true;
-    return typeof value === "string" && value.trim().length <= 50 && /^[a-zA-Z0-9-_]+$/.test(value);
-  },
-  platform: (value) => {
-    return value === "PENASLOT"; // Only allow this specific value
-  },
-  issueType: (value) => {
-    const validIssueTypes = ["Deposit/Penarikan Bermasalah", "Kerusakan Game", "Masalah Akses Akun", "Masalah Bonus/Promosi", "Kesalahan Proses Pembayaran", "Logout Tiba-tiba", "Masalah Pembayaran Jackpot", "Lainnya"];
-    return typeof value === "string" && validIssueTypes.includes(value);
-  },
-  description: (value) => {
-    return typeof value === "string" && value.trim().length > 0 && value.trim().length <= 2000;
-  },
-  dateOfIssue: (value) => {
-    // Check if it's a valid date and not in the future
-    const date = new Date(value);
-    const today = new Date();
-    return !isNaN(date.getTime()) && date <= today;
-  },
-  phoneNumber: (value) => {
-    // Must be a string that contains only numbers, possibly with + at the beginning
-    // Must be between 10-15 digits (common for international numbers)
-    return typeof value === "string" && /^\+?[0-9]{10,15}$/.test(value);
-  },
+// Store untuk token CSRF
+const tokenStore = new Map();
+
+// Fungsi untuk membuat token CSRF yang aman
+const generateSecureToken = () => {
+  return {
+    token: crypto.randomBytes(32).toString("hex"),
+    expires: Date.now() + 30 * 60 * 1000, // 30 menit
+  };
 };
 
-// Sanitize helper function
-const sanitize = (input) => {
-  if (typeof input === "string") {
-    // Remove HTML/script tags and limit length
-    return input.replace(/<\/?[^>]+(>|$)/g, "").trim();
+// Endpoint untuk mendapatkan CSRF token
+app.get("/get-csrf-token", (req, res) => {
+  const sessionId = req.cookies.sessionId || crypto.randomBytes(16).toString("hex");
+  const tokenData = generateSecureToken();
+
+  // Simpan token di server
+  tokenStore.set(sessionId, tokenData);
+
+  // Bersihkan token yang kedaluwarsa
+  for (const [key, data] of tokenStore.entries()) {
+    if (data.expires < Date.now()) {
+      tokenStore.delete(key);
+    }
   }
-  return input;
-};
 
-// Konfigurasi Mailtrap
-const transport = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.GMAIL_USER, // Menggunakan environment variable
-    pass: process.env.GMAIL_PASS, // Menggunakan environment variable
-  },
+  // Set cookie untuk session dan CSRF token
+  res.cookie("sessionId", sessionId, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    maxAge: 30 * 60 * 1000,
+  });
+
+  res.cookie("csrfToken", tokenData.token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    maxAge: 30 * 60 * 1000,
+  });asdasdasdas
+
+  res.status(200).json({ success: true });
 });
 
-app.post("/send-complaint", (req, res) => {
+// Middleware untuk validasi CSRF token
+const validateCsrfToken = (req, res, next) => {
+  const sessionId = req.cookies.sessionId;
+  const csrfToken = req.cookies.csrfToken;
+
+  if (!sessionId || !csrfToken) {
+    return res.status(403).json({
+      success: false,
+      message: "Gagal memverifikasi permintaan. Coba lagi.", //Access denied. Invalid security token
+    });
+  }
+
+  const storedTokenData = tokenStore.get(sessionId);
+
+  if (!storedTokenData || storedTokenData.token !== csrfToken || storedTokenData.expires < Date.now()) {
+    return res.status(403).json({
+      success: false,
+      message: "Akses tidak dapat diproses. Silakan coba lagi.", //Access denied. Invalid or expired security token
+    });
+  }
+
+  next();
+};
+
+// Endpoint untuk mengirim pengaduan
+app.post("/send-complaint", limiter, validateCsrfToken, (req, res) => {
   try {
     const { username, email, gameId, platform, issueType, description, dateOfIssue, phoneNumber } = req.body;
 
-    // Validate all fields
+    // Validasi input
     const validationErrors = {};
 
-    if (!validators.username(username)) validationErrors.username = "Username tidak valid";
-    if (!validators.email(email)) validationErrors.email = "Email tidak valid";
-    if (!validators.platform(platform)) validationErrors.platform = "Platform tidak valid";
-    if (!validators.issueType(issueType)) validationErrors.issueType = "Jenis issue tidak valid";
-    if (!validators.description(description)) validationErrors.description = "Deskripsi tidak valid";
-    if (!validators.dateOfIssue(dateOfIssue)) validationErrors.dateOfIssue = "Tanggal masalah tidak valid";
-    if (!validators.phoneNumber(phoneNumber)) validationErrors.phoneNumber = "Nomor telepon tidak valid";
-    if (!validators.gameId(gameId)) validationErrors.gameId = "ID game tidak valid";
+    if (!username || username.length < 3 || username.length > 50) validationErrors.username = "Username tidak valid";
+    if (!email || !/^\S+@\S+\.\S+$/.test(email)) validationErrors.email = "Email tidak valid";
+    if (!issueType) validationErrors.issueType = "Jenis keluhan tidak valid";
+    if (!description || description.length > 2000) validationErrors.description = "Deskripsi tidak valid";
+    if (!dateOfIssue || new Date(dateOfIssue) > new Date()) validationErrors.dateOfIssue = "Tanggal tidak valid";
+    if (!phoneNumber || !/^\+?[0-9]{10,15}$/.test(phoneNumber)) validationErrors.phoneNumber = "Nomor telepon tidak valid";
 
-    // If validation errors exist, return them
     if (Object.keys(validationErrors).length > 0) {
       return res.status(400).json({
         success: false,
@@ -106,50 +133,51 @@ app.post("/send-complaint", (req, res) => {
       });
     }
 
-    // Sanitize inputs
-    const sanitizedData = {
-      username: sanitize(username),
-      email: sanitize(email),
-      gameId: sanitize(gameId),
-      platform: sanitize(platform),
-      issueType: sanitize(issueType),
-      description: sanitize(description),
-      dateOfIssue: sanitize(dateOfIssue),
-      phoneNumber: sanitize(phoneNumber),
-    };
-
     // Generate reference number
     const refNumber = `PENA-${Date.now().toString().slice(-8)}`;
 
-    // Konfigurasi email
+    // Kirim email
+    const transport = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.GMAIL_USER,
+        pass: process.env.GMAIL_PASS,
+      },
+    });
+
     const mailOptions = {
-      from: process.env.GMAIL_USER, // Email pengirim
-      to: "teampenaslot@gmail.com", // Email penerima
-      subject: `PENASLOT Complaint: ${sanitizedData.issueType} - ${sanitizedData.username} - ${refNumber}`,
+      from: process.env.GMAIL_USER,
+      to: process.env.GMAIL_RECEIVER,
+      subject: `PENASLOT Complaint: ${issueType} - ${username} - ${refNumber}`,
       text: `
 PENASLOT Customer Complaint
 
 Nomor Referensi: ${refNumber}
-Username: ${sanitizedData.username}
-Email: ${sanitizedData.email}
-Nomor Whatsapp: ${sanitizedData.phoneNumber}
-Platform: ${sanitizedData.platform}
-Jenis Kendala: ${sanitizedData.issueType}
-Game ID: ${sanitizedData.gameId || "N/A"}
-Tanggal: ${sanitizedData.dateOfIssue}
+Username: ${username}
+Email: ${email}
+Nomor Whatsapp: ${phoneNumber}
+Platform: ${platform}
+Jenis Kendala: ${issueType}
+Game ID: ${gameId || "N/A"}
+Tanggal: ${dateOfIssue}
 
 Description:
-${sanitizedData.description}
+${description}
       `,
     };
 
-    // Kirim email
     transport.sendMail(mailOptions, (error, info) => {
       if (error) {
         console.error("Error sending email:", error);
         return res.status(500).json({ success: false, message: "Gagal mengirim email" });
       }
-      console.log("Email sent:", info.response);
+
+      // Hapus token setelah digunakan
+      const sessionId = req.cookies.sessionId;
+      if (sessionId) {
+        tokenStore.delete(sessionId);
+      }
+
       res.status(200).json({ success: true, referenceNumber: refNumber });
     });
   } catch (error) {
@@ -158,12 +186,7 @@ ${sanitizedData.description}
   }
 });
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ success: false, message: "Terjadi kesalahan pada server" });
-});
-
+// Jalankan server
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });
